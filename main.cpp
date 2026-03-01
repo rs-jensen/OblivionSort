@@ -5,53 +5,43 @@
 #include <future>
 #include <execution>
 #include <iterator>
-#include <cstdlib>
+#include <cmath>
 
 // A helper for small data sizes - insertion sort
 template <typename T>
 void insertion_sort(std::vector<T>& arr, int start, int end) {
     for (int i = start + 1; i <= end; ++i) {
-        T key = arr[i];
+        T key = std::move(arr[i]);
         int j = i - 1;
         while (j >= start && arr[j] > key) {
-            arr[j + 1] = arr[j];
+            arr[j + 1] = std::move(arr[j]);
             --j;
         }
-        arr[j + 1] = key;
+        arr[j + 1] = std::move(key);
     }
 }
 
 // Merge two sorted halves into one
 template <typename T>
 void merge(std::vector<T>& arr, int left, int mid, int right) {
-    int n1 = mid - left + 1;
-    int n2 = right - mid;
+    int n = right - left + 1;
 
-    std::vector<T> leftArr(arr.begin() + left, arr.begin() + mid + 1);
-    std::vector<T> rightArr(arr.begin() + mid + 1, arr.begin() + right + 1);
+    thread_local std::vector<T> buffer;
+    if ((int)buffer.size() < n) buffer.resize(n);
 
-    int i = 0, j = 0, k = left;
-    while (i < n1 && j < n2) {
-        if (leftArr[i] <= rightArr[j]) {
-            arr[k++] = leftArr[i++];
-        } else {
-            arr[k++] = rightArr[j++];
-        }
-    }
+    auto left_begin = std::make_move_iterator(arr.begin() + left);
+    auto left_end = std::make_move_iterator(arr.begin() + mid + 1);
+    auto right_begin = std::make_move_iterator(arr.begin() + mid + 1);
+    auto right_end = std::make_move_iterator(arr.begin() + right + 1);
 
-    while (i < n1) {
-        arr[k++] = leftArr[i++];
-    }
-
-    while (j < n2) {
-        arr[k++] = rightArr[j++];
-    }
+    auto buf_end = std::merge(left_begin, left_end, right_begin, right_end, buffer.begin());
+    std::move(buffer.begin(), buf_end, arr.begin() + left);
 }
 
 // Parallel merge sort with adaptive behavior
 template <typename T>
 void oblivion_sort_recursive(std::vector<T>& arr, int left, int right, int depth = 0) {
-    const int INSERTION_THRESHOLD = 64; // Use insertion sort for small chunks
+    const int INSERTION_THRESHOLD = 32; // Use insertion sort for small chunks
 
     if (left >= right) return;
 
@@ -76,10 +66,12 @@ void oblivion_sort_recursive(std::vector<T>& arr, int left, int right, int depth
 
 template <typename T>
 void oblivion_sort(std::vector<T>& arr) {
-    int num_threads = std::thread::hardware_concurrency();
-    int max_depth = (int)std::log2(num_threads > 0 ? num_threads : 1) + 2; // Max depth based on concurrency
+    if (arr.size() < 2) return;
 
-    oblivion_sort_recursive(arr, 0, arr.size() - 1, max_depth);
+    int num_threads = std::max(1u, std::thread::hardware_concurrency());
+    int max_depth = static_cast<int>(std::log2(num_threads)) + 2;
+
+    oblivion_sort_recursive(arr, 0, static_cast<int>(arr.size()) - 1, max_depth);
 }
 
 int main() {
