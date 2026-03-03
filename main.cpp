@@ -41,7 +41,7 @@ void merge(std::vector<T>& arr, int left, int mid, int right) {
 // Parallel merge sort with adaptive behavior
 template <typename T>
 void oblivion_sort_recursive(std::vector<T>& arr, int left, int right, int depth = 0) {
-    const int INSERTION_THRESHOLD = 32; // Use insertion sort for small chunks
+    const int INSERTION_THRESHOLD = 24; // tuned down to reduce overhead
 
     if (left >= right) return;
 
@@ -61,6 +61,9 @@ void oblivion_sort_recursive(std::vector<T>& arr, int left, int right, int depth
         oblivion_sort_recursive(arr, mid + 1, right, depth - 1);
     }
 
+    // Skip merge when already in order
+    if (arr[mid] <= arr[mid + 1]) return;
+
     merge(arr, left, mid, right);
 }
 
@@ -68,8 +71,11 @@ template <typename T>
 void oblivion_sort(std::vector<T>& arr) {
     if (arr.size() < 2) return;
 
-    int num_threads = std::max(1u, std::thread::hardware_concurrency());
+    unsigned num_threads = std::thread::hardware_concurrency();
+    if (num_threads == 0) num_threads = 1;
+
     int max_depth = static_cast<int>(std::log2(num_threads)) + 2;
+    if (max_depth < 0) max_depth = 0;
 
     oblivion_sort_recursive(arr, 0, static_cast<int>(arr.size()) - 1, max_depth);
 }
